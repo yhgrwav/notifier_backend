@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	AppPort     string
 	PostgresDSN string
 	RedisAddr   string
+	WarningZone float64
 }
 
 func GetEnv() (*Config, error) {
@@ -22,24 +24,33 @@ func GetEnv() (*Config, error) {
 	}
 
 	//2. Явно записываем необходимые данные в переменные
-	App_port := os.Getenv("APP_PORT")
-	postgres := os.Getenv("POSTGRES_DSN")
-	RedisAddr := os.Getenv("REDIS_ADDR")
-
+	AppPort := os.Getenv("AppPort")
+	postgres := os.Getenv("PostgresDSN")
+	RedisAddr := os.Getenv("RedisAddr")
+	radiusStr := os.Getenv("warningZone")
 	//3. Валидируем полученные данные
 	if postgres == "" {
 		return nil, errors.New("Ошибка: не указан адрес подключения к базе данных")
 	}
-	if App_port == "" {
-		App_port = "8080"
+	if AppPort == "" {
+		AppPort = "8080"
 	}
 	if RedisAddr == "" {
 		RedisAddr = "localhost:6379"
 	}
+	radius, err := strconv.ParseFloat(radiusStr, 64)
+	if err != nil {
+		radius = 500.0 // Дефолтное значение
+	}
+	if radiusStr == "" {
+		log.Println("Ошибка: переменная радиуса поиска инцидентов не указана, используем 500.0")
+		radius = 500.0
+	}
 	//4. Возвращаем указатель на структуру
 	return &Config{
-		AppPort:     App_port,
+		AppPort:     AppPort,
 		PostgresDSN: postgres,
 		RedisAddr:   RedisAddr,
+		WarningZone: radius,
 	}, nil
 }
