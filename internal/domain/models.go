@@ -1,9 +1,13 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type Incident struct { // Тело инцидента
-	ID           string    `json:"id"`            //UUID
+	ID           uuid.UUID `json:"id"`            //UUID
 	Title        string    `json:"title"`         //Заголовок устанавливаемый оператором (например "Пожар")
 	Description  string    `json:"description"`   //Описание инцидента (например "Огонь разрастается в Южную сторону")
 	Latitude     float64   `json:"latitude"`      //Широта
