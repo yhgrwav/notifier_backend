@@ -18,7 +18,8 @@ type IncidentRepository interface {
 	Get(ctx context.Context, lat float64, long float64, limit, offset int, extraRadius float64) ([]*domain.Incident, error)
 	Update(ctx context.Context, incident *domain.Incident) error
 	Delete(ctx context.Context, id uuid.UUID) error
-
+	SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentID *uuid.UUID) error
+	GetStats(ctx context.Context, incidentID uuid.UUID) (int, error)
 	Close()
 }
 
@@ -158,4 +159,38 @@ func (r *PostgresStorage) Get(ctx context.Context, lat float64, long float64, li
 	}
 
 	return incidents, nil
+}
+
+// SaveCheck реализовывает условия пункта №3 ТЗ - сохранить факт проверки в БД
+func (r *PostgresStorage) SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentID uuid.UUID) error {
+	if r.conn == nil {
+		return fmt.Errorf("подключение к базе данных не инициализировано")
+	}
+	query := ` INSERT INTO location_checks (user_id, latitude, longitude, incident_id) 
+        VALUES ($1, $2, $3, $4)`
+
+	_, err := r.conn.Exec(ctx, query, userID, lat, lon, incidentID)
+	if err != nil {
+		return fmt.Errorf("ошибка при сохранении лога в БД: %w", err)
+	}
+	return nil
+}
+
+// GetStats отвечает за то, чтобы отдавать user_count(уникальные user_id за N минут по условию) для запрашиваемого инцидента
+func (r *PostgresStorage) GetStats(ctx context.Context, incidentID uuid.UUID, minutes int) (int, error) {
+	if r.conn == nil {
+		return 0, fmt.Errorf("подключение к базе данных не инициализировано")
+	}
+	var count int
+	query := `
+        SELECT COUNT(DISTINCT user_id)
+        FROM location_checks
+        WHERE incident_id = $1
+          AND checked_at >= NOW() - (interval '1 minute' * $2)`
+
+	err := r.conn.QueryRow(ctx, query, incidentID, minutes).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка получения статистики для инцидента %s: %w", incidentID, err)
+	}
+	return count, nil
 }
