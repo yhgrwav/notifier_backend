@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,7 +56,8 @@ func (s *IncidentService) Create(ctx context.Context, i *domain.Incident) (strin
 	return id.String(), nil
 }
 
-// Get отвечает за то, чтобы возвращать валидный список инцидентов, в радиусе которых находится пользователь
+// Get отвечает за то, чтобы возвращать валидный список инцидентов в радиусе(warningZone из .env)
+// этот метод универсален и для пользователя и для оператора, а также не требует пересборки проекта ради изменения радиуса
 func (i *IncidentService) Get(ctx context.Context, lat float64, long float64, limit, offset int) ([]*domain.Incident, error) {
 	//Проверка на валидность координат
 	if lat < -90 || lat > 90 {
@@ -146,4 +148,39 @@ func (i *IncidentService) Update(ctx context.Context, id string, incident *domai
 		return uuid.Nil, fmt.Errorf("ошибка обновления инцидента: %w", err)
 	}
 	return incident.ID, nil
+}
+
+// CheckLocation Принимаем структуру запроса и отдаёт структуру ответа, которые описаны в /domain/models.go
+func (i *IncidentService) CheckLocation(ctx context.Context, request domain.LocationCheckRequest, limit, offset int) (domain.LocationCheckResponse, error) {
+	//Проверка на валидность координат
+	if request.Latitude < -90 || request.Latitude > 90 {
+		return domain.LocationCheckResponse{}, errors.New("невалидная широта (должна быть в диапазоне от -90 до 90)")
+	}
+	if request.Longitude < -180 || request.Longitude > 180 {
+		return domain.LocationCheckResponse{}, errors.New("невалидная долгота (должна быть в диапазоне от -180 до 180)")
+	}
+	// Вызываем метод из репозитория, передавая в аргументы параметры пагинации из слоя выше,
+	// т.е. указать в query-запросе параметры пагинации, иначе дефолт
+	incidents, err := i.repo.Get(ctx, request.Latitude, request.Longitude, limit, offset, i.warningZone)
+	if err != nil {
+		return domain.LocationCheckResponse{}, errors.New("ошибка получения данных")
+	}
+	//создаем переменную указатель, которая по дефолту nil
+	// суть переменной - передать хоть какой-то аргумент в вызове метода saveCheck()
+	var dangerID *uuid.UUID
+	if len(incidents) > 0 { // проверяем нашли ли мы хоть один инцидент
+		id := incidents[0].ID // если да - записываем айди первого инцидента в id
+		dangerID = &id        // и передаем указатель в значение переменной
+	}
+
+	//логируем вызов метода
+	err = i.repo.SaveCheck(ctx, request.UserID, request.Latitude, request.Longitude, dangerID)
+	if err != nil {
+		log.Printf("ошибка логирования запроса:%v", err)
+	}
+
+	return domain.LocationCheckResponse{
+		IsInDanger: len(incidents) > 0,
+		Incidents:  incidents,
+	}, nil
 }
