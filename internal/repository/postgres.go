@@ -118,6 +118,9 @@ func (r *PostgresStorage) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
+
+// Метод отвечает за то, чтобы относительно точки(полученной от пользователя или оператора) найти список ицидентов
+// отсортированный по удалению
 func (r *PostgresStorage) Get(ctx context.Context, lat float64, long float64, limit, offset int, extraRadius float64) ([]*domain.Incident, error) {
 	if r.conn == nil {
 		return nil, fmt.Errorf("подключение к базе данных не инициализировано")
@@ -162,7 +165,7 @@ func (r *PostgresStorage) Get(ctx context.Context, lat float64, long float64, li
 }
 
 // SaveCheck реализовывает условия пункта №3 ТЗ - сохранить факт проверки в БД
-func (r *PostgresStorage) SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentID uuid.UUID) error {
+func (r *PostgresStorage) SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentID *uuid.UUID) error {
 	if r.conn == nil {
 		return fmt.Errorf("подключение к базе данных не инициализировано")
 	}
@@ -177,20 +180,33 @@ func (r *PostgresStorage) SaveCheck(ctx context.Context, userID string, lat, lon
 }
 
 // GetStats отвечает за то, чтобы отдавать user_count(уникальные user_id за N минут по условию) для запрашиваемого инцидента
-func (r *PostgresStorage) GetStats(ctx context.Context, incidentID uuid.UUID, minutes int) (int, error) {
+func (r *PostgresStorage) GetStats(ctx context.Context, minutes int) ([]domain.StatisticResponse, error) {
 	if r.conn == nil {
-		return 0, fmt.Errorf("подключение к базе данных не инициализировано")
+		return nil, fmt.Errorf("подключение к базе данных не инициализировано")
 	}
-	var count int
+	//запрашиваем список из двух таблиц в формате инцидент - кол-во уникальных юзеров за указанный период времени в минутах
 	query := `
-        SELECT COUNT(DISTINCT user_id)
+        SELECT incident_id, COUNT(DISTINCT user_id)
         FROM location_checks
-        WHERE incident_id = $1
-          AND checked_at >= NOW() - (interval '1 minute' * $2)`
+        WHERE incident_id IS NOT NULL 
+          AND checked_at >= NOW() - (interval '1 minute' * $1)
+        GROUP BY incident_id`
 
-	err := r.conn.QueryRow(ctx, query, incidentID, minutes).Scan(&count)
+	rows, err := r.conn.Query(ctx, query, minutes)
 	if err != nil {
-		return 0, fmt.Errorf("ошибка получения статистики для инцидента %s: %w", incidentID, err)
+		return nil, fmt.Errorf("ошибка получения статистики для инцидента: %w", err)
 	}
-	return count, nil
+	defer rows.Close()
+
+	var stats []domain.StatisticResponse
+	for rows.Next() {
+		//В каждой итерации создаем локальную переменную в которую записываем результат поиска
+		//и либо возвращаем ошибку, либо записываем полученный результат в слайс stats
+		var s domain.StatisticResponse
+		if err := rows.Scan(&s.IncidentID, &s.UserCount); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, nil
 }
