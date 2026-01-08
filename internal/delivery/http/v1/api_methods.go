@@ -39,3 +39,14 @@ func (h *Handler) checkLocation(c *gin.Context) {
 	//Если нет ошибок и всё ок - отдаём ок и тело ответа
 	c.JSON(200, resp)
 }
+
+// GetStats реализует требования тз, отдавая статистику по зонам  по запросу GET /api/v1/incidents/stats
+func (h *Handler) GetStats(c *gin.Context) {
+	//читать какие-то данные от пользователя нам не нужно, так что просто сразу же вызываем сервис
+	result, err := h.service.GetStats(c.Request.Context())
+	if err != nil {
+		c.JSON(500, gin.H{"Ошибка": err.Error()}) //обрабатываем единственный кейс когда у нас может что-то поломаться
+		return
+	}
+	c.JSON(200, result) //и возвращаем полученный результат
+}
