@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -150,7 +152,7 @@ func (i *IncidentService) Update(ctx context.Context, id string, incident *domai
 	return incident.ID, nil
 }
 
-// CheckLocation Принимаем структуру запроса и отдаёт структуру ответа, которые описаны в /domain/models.go
+// CheckLocation Принимает структуру запроса и отдаёт структуру ответа, которые описаны в /domain/models.go
 func (i *IncidentService) CheckLocation(ctx context.Context, request domain.LocationCheckRequest, limit, offset int) (domain.LocationCheckResponse, error) {
 	//Проверка на валидность координат
 	if request.Latitude < -90 || request.Latitude > 90 {
@@ -183,4 +185,28 @@ func (i *IncidentService) CheckLocation(ctx context.Context, request domain.Loca
 		IsInDanger: len(incidents) > 0,
 		Incidents:  incidents,
 	}, nil
+}
+
+// По условию задачи мы должны при запросе статистики читать переменную из .env и отдавать статистику за N минут
+// В сервис слое мы читаем переменную, обрабатываем невалидные кейсы и вызываем метод репозитория
+func (i *IncidentService) GetStats(ctx context.Context) ([]domain.StatisticResponse, error) {
+	//Получаем из .env переменную
+	configTime := os.Getenv("STATS_TIME_WINDOW_MINUTES")
+
+	//Переводим строку(переменную) в число
+	timeInt, _ := strconv.Atoi(configTime)
+
+	//Подставляем дефолты в невалидных кейсах чтобы не ронять приложение или базу
+	if timeInt < 1 {
+		timeInt = 1
+	} else if timeInt > 10000 {
+		timeInt = 10000
+	}
+
+	//Вызываем сервис
+	result, err := i.repo.GetStats(ctx, timeInt)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
