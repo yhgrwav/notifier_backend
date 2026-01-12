@@ -189,19 +189,9 @@ func (i *IncidentService) CheckLocation(ctx context.Context, request domain.Loca
 
 // По условию задачи мы должны при запросе статистики читать переменную из .env и отдавать статистику за N минут
 // В сервис слое мы читаем переменную, обрабатываем невалидные кейсы и вызываем метод репозитория
-func (i *IncidentService) GetStats(ctx context.Context) ([]domain.StatisticResponse, error) {
-	//Получаем из .env переменную
-	configTime := os.Getenv("STATS_TIME_WINDOW_MINUTES")
-
-	//Переводим строку(переменную) в число
-	timeInt, _ := strconv.Atoi(configTime)
-
-	//Подставляем дефолты в невалидных кейсах чтобы не ронять приложение или базу
-	if timeInt < 1 {
-		timeInt = 1
-	} else if timeInt > 10000 {
-		timeInt = 10000
-	}
+func (i *IncidentService) GetStats(ctx context.Context, STATS_TIME_WINDOW_MINUTES int) ([]domain.StatisticResponse, error) {
+	//timeInt = Stats_time_window_minutes из .env по условию
+	timeInt := STATS_TIME_WINDOW_MINUTES
 
 	//Вызываем сервис
 	result, err := i.repo.GetStats(ctx, timeInt)
