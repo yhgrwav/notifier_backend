@@ -16,7 +16,7 @@ type Config struct {
 	WarningZone  float64
 	CacheTimeout int
 	StatsTime    int
-	СacheTTL     int
+	CacheTTL     int
 }
 
 func GetEnv() (*Config, error) {
@@ -76,6 +76,6 @@ func GetEnv() (*Config, error) {
 		WarningZone:  radius,
 		CacheTimeout: CacheUpdateTimeout,
 		StatsTime:    StatsTime,
-		СacheTTL:     CacheTTl,
+		CacheTTL:     CacheTTl,
 	}, nil
 }
