@@ -10,15 +10,18 @@ import (
 )
 
 type Config struct {
-	AppPort     string
-	PostgresDSN string
-	RedisAddr   string
-	WarningZone float64
+	AppPort      string
+	PostgresDSN  string
+	RedisAddr    string
+	WarningZone  float64
+	CacheTimeout int
+	StatsTime    int
+	CacheTTL     int
 }
 
 func GetEnv() (*Config, error) {
 	//1. С помощью godotenv.Load() записываем содержимое файла .env в память приложения
-	//Если не удалось прочитать через .env, читаем из enviroment в docker-compose
+	//Если не удалось прочитать через .env, читаем из environment в docker-compose
 	if err := godotenv.Load(); err != nil {
 		log.Println("Файл .env не найден, производится попытка получить системные переменные...")
 	}
@@ -28,6 +31,13 @@ func GetEnv() (*Config, error) {
 	postgres := os.Getenv("PostgresDSN")
 	RedisAddr := os.Getenv("RedisAddr")
 	radiusStr := os.Getenv("warningZone")
+	cacheTimeout := os.Getenv("CacheTimeout")
+	CacheUpdateTimeout, _ := strconv.Atoi(cacheTimeout)
+	statsTimeN := os.Getenv("STATS_TIME_WINDOW_MINUTES")
+	StatsTime, _ := strconv.Atoi(statsTimeN)
+	cacheTimeToLive := os.Getenv("cacheTTL")
+	CacheTTl, _ := strconv.Atoi(cacheTimeToLive)
+
 	//3. Валидируем полученные данные
 	if postgres == "" {
 		return nil, errors.New("Ошибка: не указан адрес подключения к базе данных")
@@ -46,11 +56,26 @@ func GetEnv() (*Config, error) {
 		log.Println("Ошибка: переменная радиуса поиска инцидентов не указана, используем 500.0")
 		radius = 500.0
 	}
+	if CacheUpdateTimeout > 10 || CacheUpdateTimeout < 1 {
+		CacheUpdateTimeout = 2
+	}
+	if StatsTime < 1 {
+		StatsTime = 1
+	} else if StatsTime > 10000 {
+		StatsTime = 10000
+	}
+	if CacheTTl > 100 || CacheTTl < 1 {
+		CacheTTl = 10
+	}
+
 	//4. Возвращаем указатель на структуру
 	return &Config{
-		AppPort:     AppPort,
-		PostgresDSN: postgres,
-		RedisAddr:   RedisAddr,
-		WarningZone: radius,
+		AppPort:      AppPort,
+		PostgresDSN:  postgres,
+		RedisAddr:    RedisAddr,
+		WarningZone:  radius,
+		CacheTimeout: CacheUpdateTimeout,
+		StatsTime:    StatsTime,
+		CacheTTL:     CacheTTl,
 	}, nil
 }

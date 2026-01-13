@@ -18,8 +18,8 @@ type IncidentRepository interface {
 	Get(ctx context.Context, lat float64, long float64, limit, offset int, extraRadius float64) ([]*domain.Incident, error)
 	Update(ctx context.Context, incident *domain.Incident) error
 	Delete(ctx context.Context, id uuid.UUID) error
-	SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentID *uuid.UUID) error
-	GetStats(ctx context.Context, incidentID uuid.UUID) (int, error)
+	SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentIDs []uuid.UUID) error
+	GetStats(ctx context.Context, minutes int) ([]domain.StatisticResponse, error)
 	Close()
 }
 
@@ -165,14 +165,14 @@ func (r *PostgresStorage) Get(ctx context.Context, lat float64, long float64, li
 }
 
 // SaveCheck реализовывает условия пункта №3 ТЗ - сохранить факт проверки в БД
-func (r *PostgresStorage) SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentID *uuid.UUID) error {
+func (r *PostgresStorage) SaveCheck(ctx context.Context, userID string, lat, lon float64, incidentIDs []uuid.UUID) error {
 	if r.conn == nil {
 		return fmt.Errorf("подключение к базе данных не инициализировано")
 	}
-	query := ` INSERT INTO location_checks (user_id, latitude, longitude, incident_id) 
+	query := ` INSERT INTO location_checks (user_id, latitude, longitude, incident_ids) 
         VALUES ($1, $2, $3, $4)`
 
-	_, err := r.conn.Exec(ctx, query, userID, lat, lon, incidentID)
+	_, err := r.conn.Exec(ctx, query, userID, lat, lon, incidentIDs)
 	if err != nil {
 		return fmt.Errorf("ошибка при сохранении лога в БД: %w", err)
 	}
