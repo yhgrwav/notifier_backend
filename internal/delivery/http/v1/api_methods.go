@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// POST /api/v1/location/check
 func (h *Handler) checkLocation(c *gin.Context) {
 	//Создаем переменную в которую будем записывать ответ
 	var request domain.LocationCheckRequest
@@ -43,7 +44,7 @@ func (h *Handler) checkLocation(c *gin.Context) {
 // GetStats реализует требования тз, отдавая статистику по зонам  по запросу GET /api/v1/incidents/stats
 func (h *Handler) GetStats(c *gin.Context) {
 	//читать какие-то данные от пользователя нам не нужно, так что просто сразу же вызываем сервис
-	result, err := h.service.GetStats(c.Request.Context())
+	result, err := h.service.GetStats(c.Request.Context(), h.statsTime)
 	if err != nil {
 		c.JSON(500, gin.H{"Ошибка": err.Error()}) //обрабатываем единственный кейс когда у нас может что-то поломаться
 		return
