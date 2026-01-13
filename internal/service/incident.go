@@ -5,11 +5,9 @@ import (
 	"RedCollar/internal/domain"
 	"RedCollar/internal/repository"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,12 +16,14 @@ import (
 type IncidentService struct {
 	//Мы как сервис требуем какое-то хранилище, для которого мы будем реализовывать нашу логику
 	repo        repository.IncidentRepository
+	rdb         repository.RedisRepository
 	warningZone float64
+	CacheTTL    int
 }
 
 // Принимаем объект с нужными методами(repository) и возвращаем указатель с которым будем работать
-func NewIncidentService(repo repository.IncidentRepository, warningZone float64) *IncidentService {
-	return &IncidentService{repo: repo, warningZone: warningZone}
+func NewIncidentService(repo repository.IncidentRepository, warningZone float64, CacheTTL int) *IncidentService {
+	return &IncidentService{repo: repo, warningZone: warningZone, CacheTTL: CacheTTL}
 }
 
 // Create отвечает за создание инцидента, валидацию полей, установку дефолтов
@@ -161,26 +161,54 @@ func (i *IncidentService) CheckLocation(ctx context.Context, request domain.Loca
 	if request.Longitude < -180 || request.Longitude > 180 {
 		return domain.LocationCheckResponse{}, errors.New("невалидная долгота (должна быть в диапазоне от -180 до 180)")
 	}
-	// Вызываем метод из репозитория, передавая в аргументы параметры пагинации из слоя выше,
-	// т.е. указать в query-запросе параметры пагинации, иначе дефолт
-	incidents, err := i.repo.Get(ctx, request.Latitude, request.Longitude, limit, offset, i.warningZone)
-	if err != nil {
-		return domain.LocationCheckResponse{}, errors.New("ошибка получения данных")
-	}
-	//создаем переменную указатель, которая по дефолту nil
-	// суть переменной - передать хоть какой-то аргумент в вызове метода saveCheck()
-	var dangerID *uuid.UUID
-	if len(incidents) > 0 { // проверяем нашли ли мы хоть один инцидент
-		id := incidents[0].ID // если да - записываем айди первого инцидента в id
-		dangerID = &id        // и передаем указатель в значение переменной
+
+	//создаем переменную для хранения инцидентов
+	var incidents []*domain.Incident
+	//делаем из координат запроса ключ
+	key := fmt.Sprintf("inc:%.2f:%.2f", request.Latitude, request.Longitude)
+
+	//Проверяем есть ли по нашим координатам инцидент в кэше, чтобы не нагружать лишний раз базу
+	cacheResult, err := i.GetIncidentCache(ctx, key)
+	if err == nil && cacheResult != nil { // если нет ошибки и есть результат - отдаём результат и выходим
+		return domain.LocationCheckResponse{
+			IsInDanger: len(cacheResult) > 0,
+			Incidents:  cacheResult,
+		}, nil
 	}
 
-	//логируем вызов метода
-	err = i.repo.SaveCheck(ctx, request.UserID, request.Latitude, request.Longitude, dangerID)
+	//если не случился return на этапе проверки кэша - идём в базу с координатами пользователя и ищем инциденты там
+	incidents, err = i.repo.Get(ctx, request.Latitude, request.Longitude, limit, offset, i.warningZone)
 	if err != nil {
-		log.Printf("ошибка логирования запроса:%v", err)
+		return domain.LocationCheckResponse{}, fmt.Errorf("ошибка получения данных:%w", err)
 	}
 
+	//создаём массив с len(incidents), т.к. это более быстрое решение чем конструкция слайс+append
+	incidentIDs := make([]uuid.UUID, len(incidents))
+
+	//если инциденты не пустые - кэшируем их по TTL из конфига
+	if len(incidents) > 0 {
+		ttl := time.Duration(i.CacheTTL) * time.Minute //оборачиваем переменную из конфига, прошедшую валидацию в time.Minute
+		_ = i.CacheIncidents(ctx, request.Latitude, request.Longitude, incidents, ttl)
+	}
+
+	//за один последовательный цикл мы и записываем в слайс айди всех инцидентов и вызываем метод WebhookPush()
+	for inc := range incidents { //перебираем инциденты
+		//копируем id из incidents в incidentIDs
+		incidentIDs[inc] = incidents[inc].ID
+
+		//пушим вебхук в очередь
+		_ = i.rdb.WebhookPush(ctx, domain.Webhook{
+			UserID:     request.UserID,
+			IncidentID: incidents[inc].ID,
+			DetectedAt: time.Now(),
+		})
+	}
+	//соответственно если инциденты найдены и выполнилась главная бизнес-логика - мы вызываем SaveCheck()
+	//и сохраняем факт проверки в БД
+	err = i.repo.SaveCheck(ctx, request.UserID, request.Latitude, request.Longitude, incidentIDs)
+	if err != nil {
+		return domain.LocationCheckResponse{}, errors.New("ошибка сохранения данных")
+	}
 	return domain.LocationCheckResponse{
 		IsInDanger: len(incidents) > 0,
 		Incidents:  incidents,
