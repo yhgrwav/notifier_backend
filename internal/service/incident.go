@@ -200,3 +200,35 @@ func (i *IncidentService) GetStats(ctx context.Context, STATS_TIME_WINDOW_MINUTE
 	}
 	return result, nil
 }
+
+// ключ и ttl мы получаем сверху(из запроса пользователя, т.к. ключ - обрезанные координаты, а ttl мы передаем из .env)
+// внутри метода мы должны установить валидацию данных, в нашем случае координаты для ключа, и валидные параметры инцидента
+func (i *IncidentService) CacheIncidents(ctx context.Context, lat, lon float64, incidents []*domain.Incident, ttl time.Duration) error {
+	//создаём ключ в формате "inc:12:34", где 12 - lat, а 34 - lon
+	key := fmt.Sprintf("inc:%.2f:%.2f", lat, lon)
+
+	//полученный массив инцидентов хэшируем
+	data, err := json.Marshal(incidents)
+	if err != nil {
+		return err
+	}
+
+	//сгенерированный ключ и хэш данные используем как аргументы и возвращаем вызов метода хэширования redis
+	return i.rdb.SetCache(ctx, key, data, ttl)
+}
+
+// Метод  должен принимать ключ(примерные координаты) и отдавать слайс инцидентов или фолбэк на метод базы с более долгим запросом
+func (i *IncidentService) GetIncidentCache(ctx context.Context, key string) ([]*domain.Incident, error) {
+	result, err := i.rdb.GetCache(ctx, key)
+	if errors.Is(err, repository.ErrCacheMiss) { //Обрабатываем кейс когда в хранилище кэша пусто благодаря кастомной
+		return nil, nil
+	} else if err != nil { //Обрабатываем кейс когда мы действительно получили ошибку
+		return nil, err
+	}
+	var incidents []*domain.Incident //Создаем переменную куда будем запиысвать результат
+	err = json.Unmarshal(result, &incidents)
+	if err != nil { //Обрабатываем ошибку анмаршалинга
+		return nil, err
+	}
+	return incidents, nil //Возвращаем слайс с полученным результатом
+}
