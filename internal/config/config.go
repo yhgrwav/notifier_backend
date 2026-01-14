@@ -70,12 +70,12 @@ func GetEnv() (*Config, error) {
 
 	//4. Возвращаем указатель на структуру
 	return &Config{
-		AppPort:      AppPort,
-		PostgresDSN:  postgres,
-		RedisAddr:    RedisAddr,
-		WarningZone:  radius,
-		CacheTimeout: CacheUpdateTimeout,
-		StatsTime:    StatsTime,
-		CacheTTL:     CacheTTl,
+		AppPort:      AppPort,            //порт приложения
+		PostgresDSN:  postgres,           //строка подключения к postgres
+		RedisAddr:    RedisAddr,          //адрес подключения к redis
+		WarningZone:  radius,             //радиус, в котором мы ищем опасности относительно точки пользователя
+		CacheTimeout: CacheUpdateTimeout, //максимальное время ожидания ответа от redis (секунд)
+		StatsTime:    StatsTime,          //отвечает за то, за сколько минут мы будем собирать статистику
+		CacheTTL:     CacheTTl,           //время жизни кэша в минутах
 	}, nil
 }
