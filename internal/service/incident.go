@@ -2,16 +2,30 @@
 package service
 
 import (
-	"RedCollar/internal/domain"
-	"RedCollar/internal/repository"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
+
+	"RedCollar/internal/domain"
+	"RedCollar/internal/repository"
 
 	"github.com/google/uuid"
 )
+
+// HTTPClient должен уметь делать post
+type HTTPClient interface {
+	Post(url, contetType string, body io.Reader) (*http.Response, error)
+}
+
+func NewHTTPClient(timeout int) *http.Client {
+	return &http.Client{
+		Timeout: time.Duration(timeout) * time.Second, // ожидаем таймаут в int, переводим уже как надо внутри вызова
+	}
+}
 
 type IncidentService struct {
 	//Мы как сервис требуем какое-то хранилище, для которого мы будем реализовывать нашу логику
@@ -22,8 +36,8 @@ type IncidentService struct {
 }
 
 // Принимаем объект с нужными методами(repository) и возвращаем указатель с которым будем работать
-func NewIncidentService(repo repository.IncidentRepository, warningZone float64, CacheTTL int) *IncidentService {
-	return &IncidentService{repo: repo, warningZone: warningZone, CacheTTL: CacheTTL}
+func NewIncidentService(repo repository.IncidentRepository, rdb repository.RedisRepository, warningZone float64, CacheTTL int) *IncidentService {
+	return &IncidentService{repo: repo, rdb: rdb, warningZone: warningZone, CacheTTL: CacheTTL}
 }
 
 // Create отвечает за создание инцидента, валидацию полей, установку дефолтов
@@ -46,6 +60,7 @@ func (s *IncidentService) Create(ctx context.Context, i *domain.Incident) (strin
 	if i.RadiusMeters <= 0 || i.RadiusMeters > 2000 {
 		i.RadiusMeters = 200
 	}
+	i.ID = uuid.New()
 	i.IsActive = true
 	i.CreatedAt = time.Now()
 	//Когда у нас готово всё кроме i.ID, мы дёргаем метод репозитория и передаём туда всё необходимое, чтобы создать
