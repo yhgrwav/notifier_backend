@@ -184,12 +184,12 @@ func (r *PostgresStorage) GetStats(ctx context.Context, minutes int) ([]domain.S
 	if r.conn == nil {
 		return nil, fmt.Errorf("подключение к базе данных не инициализировано")
 	}
-	//запрашиваем список из двух таблиц в формате инцидент - кол-во уникальных юзеров за указанный период времени в минутах
+	//запрашиваем список инцидентов и кол-во уникальных юзеров за указанный период времени в минутах,
+	//разворачивая массив incident_ids
 	query := `
-        SELECT incident_id, COUNT(DISTINCT user_id)
+        SELECT unnest(incident_ids) AS incident_id, COUNT(DISTINCT user_id)
         FROM location_checks
-        WHERE incident_id IS NOT NULL 
-          AND checked_at >= NOW() - (interval '1 minute' * $1)
+        WHERE checked_at >= NOW() - (interval '1 minute' * $1)
         GROUP BY incident_id`
 
 	rows, err := r.conn.Query(ctx, query, minutes)
