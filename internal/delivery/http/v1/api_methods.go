@@ -137,3 +137,8 @@ func (h *Handler) GetIncidents(c *gin.Context) {
 	}
 	c.JSON(200, result) //если всё ок - отдаём ок и результат
 }
+
+// GET /api/v1/system/health
+func (h *Handler) GetHealth(c *gin.Context) {
+	c.JSON(200, gin.H{"всё": "ок"})
+}
