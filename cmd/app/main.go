@@ -29,6 +29,13 @@ func main() {
 
 	serv := service.NewIncidentService(db, rdb, cfg.WarningZone, cfg.CacheTTL)
 
+	client := service.NewHTTPClient(cfg.WebhookTimeout)
+
+	go func() {
+		log.Printf("вебхук воркер запущен по адресу %s", cfg.WebhookUrl)
+		worker.NewWebhookWorker(rdb, client, cfg.WebhookUrl, cfg.WebhookRetries)
+	}()
+
 	h := v1.NewHandler(serv, cfg.StatsTime)
 
 	log.Printf("сервер запущен на порту: %s", cfg.AppPort)
