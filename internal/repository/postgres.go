@@ -27,7 +27,7 @@ type PostgresStorage struct {
 	conn *pgxpool.Pool
 }
 
-func NewPostgresConnection(ctx context.Context, cfg config.Config) (*PostgresStorage, error) {
+func NewPostgresConnection(ctx context.Context, cfg *config.Config) (*PostgresStorage, error) {
 	dsn := cfg.PostgresDSN
 	if dsn == "" {
 		return nil, fmt.Errorf("строка подключения к базе данных не установлена")
@@ -58,7 +58,7 @@ func (r *PostgresStorage) Create(ctx context.Context, incident *domain.Incident)
 
 	var id uuid.UUID
 	query := `
-        INSERT INTO incidents (title, description, lat, lon, radius, is_active, created_at) 
+        INSERT INTO incidents (title, description, lat, lon, radius_meters, is_active, created_at) 
         VALUES ($1, $2, $3, $4, $5, $6, $7) 
         RETURNING id`
 
@@ -78,7 +78,7 @@ func (r *PostgresStorage) GetByID(ctx context.Context, id uuid.UUID) (*domain.In
 	}
 
 	var incident domain.Incident
-	query := `SELECT id, title, description, lat, lon, radius, is_active, created_at FROM incidents WHERE id = $1`
+	query := `SELECT id, title, description, lat, lon, radius_meters, is_active, created_at FROM incidents WHERE id = $1`
 
 	err := r.conn.QueryRow(ctx, query, id).Scan(
 		&incident.ID, &incident.Title, &incident.Description, &incident.Latitude, &incident.Longitude, &incident.RadiusMeters, &incident.IsActive, &incident.CreatedAt,
@@ -98,7 +98,7 @@ func (r *PostgresStorage) Update(ctx context.Context, incident *domain.Incident)
 		return fmt.Errorf("подключение к базе данных не инициализировано")
 	}
 
-	query := `UPDATE incidents SET title=$1, description=$2, lat=$3, lon=$4, radius=$5, is_active=$6 WHERE id=$7`
+	query := `UPDATE incidents SET title=$1, description=$2, lat=$3, lon=$4, radius_meters=$5, is_active=$6 WHERE id=$7`
 	_, err := r.conn.Exec(ctx, query, incident.Title, incident.Description, incident.Latitude, incident.Longitude, incident.RadiusMeters, incident.IsActive, incident.ID)
 	if err != nil {
 		return fmt.Errorf("ошибка обновления записи в базе данных: %w", err)
@@ -131,14 +131,14 @@ func (r *PostgresStorage) Get(ctx context.Context, lat float64, long float64, li
 	//Логика: если точка(координаты пользователя) находятся в радиусе инцидента - инцидент попадает в слайс инцидентов
 	//в которых сейчас находится пользователь и для инцидента в статистику записывается конкретный юзер (требования условия)
 	query := ` 
-    SELECT id, title, description, lat, lon, radius, is_active, created_at 
+    SELECT id, title, description, lat, lon, radius_meters, is_active, created_at 
     FROM incidents 
     WHERE (
         6371000 * acos(
             cos(radians($1)) * cos(radians(lat)) * cos(radians(lon) - radians($2)) + 
             sin(radians($1)) * sin(radians(lat))
         )
-    ) <= (radius + $5) 
+    ) <= (radius_meters + $5) 
     AND is_active = true
     LIMIT $3 OFFSET $4`
 	rows, err := r.conn.Query(ctx, query, lat, long, limit, offset, extraRadius)
@@ -169,7 +169,7 @@ func (r *PostgresStorage) SaveCheck(ctx context.Context, userID string, lat, lon
 	if r.conn == nil {
 		return fmt.Errorf("подключение к базе данных не инициализировано")
 	}
-	query := ` INSERT INTO location_checks (user_id, latitude, longitude, incident_ids) 
+	query := ` INSERT INTO location_checks (user_id, lat, lon, incident_ids) 
         VALUES ($1, $2, $3, $4)`
 
 	_, err := r.conn.Exec(ctx, query, userID, lat, lon, incidentIDs)
