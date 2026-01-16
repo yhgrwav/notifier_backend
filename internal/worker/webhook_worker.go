@@ -13,13 +13,13 @@ import (
 )
 
 type WebhookWorker struct {
-	redisRepo     *repository.RedisRepository
+	redisRepo     repository.RedisRepository
 	client        *http.Client
 	URL           string
 	retriesAmount int
 }
 
-func NewWebhookWorker(redisRepo *repository.RedisRepository, client *http.Client, url string, retries int) *WebhookWorker {
+func NewWebhookWorker(redisRepo repository.RedisRepository, client *http.Client, url string, retries int) *WebhookWorker {
 	return &WebhookWorker{
 		redisRepo:     redisRepo,
 		client:        client,
