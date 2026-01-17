@@ -22,6 +22,7 @@ type Config struct {
 	WebhookUrl     string
 	WebhookRetries int
 	WebhookTimeout int
+	ApiKey         string
 }
 
 func GetEnv() (*Config, error) {
@@ -56,6 +57,8 @@ func GetEnv() (*Config, error) {
 
 	webhooktimeout := os.Getenv("webhook_Timeout")
 	whto, _ := strconv.Atoi(webhooktimeout)
+
+	ApiKey := os.Getenv("ApiKey")
 
 	//3. Валидируем полученные данные
 	if postgres == "" {
@@ -108,6 +111,12 @@ func GetEnv() (*Config, error) {
 	if whto > 100 || whto < 0 {
 		whto = 10
 	}
+	if ApiKey == "" {
+		return &Config{}, errors.New("Ошибка: не указан API ключ")
+	}
+	if len(ApiKey) > 20 { // условное ограничение, которое необходимо будет поменять под какое-то стандартизированое значение
+		return &Config{}, errors.New("Ошибка: невалидная длина API ключа")
+	}
 
 	//4. Возвращаем указатель на структуру
 	return &Config{
@@ -121,5 +130,6 @@ func GetEnv() (*Config, error) {
 		WebhookUrl:     WebhookUrl,         //ссылка на http-сервер-заглушку
 		WebhookRetries: retries,            //количество попыток отправить вебхук
 		WebhookTimeout: whto,
+		ApiKey:         ApiKey,
 	}, nil
 }
