@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"RedCollar/internal/delivery/http/middleware"
 	"RedCollar/internal/domain"
 	"context"
 
@@ -31,7 +32,7 @@ func NewHandler(s IncidentService, st int) *Handler {
 }
 
 // Init будет отвечать за регистрацию путей
-func (h *Handler) Init(api *gin.RouterGroup) {
+func (h *Handler) Init(api *gin.RouterGroup, apiKey string) {
 	v1 := api.Group("v1") //требуемый путь из ТЗ
 	{
 		//эндпоинт проверки координат для юзера
@@ -59,12 +60,12 @@ func (h *Handler) Init(api *gin.RouterGroup) {
 	}
 }
 
-// Run отвечает за то, чтобы запустить http сервер на порту, который в main.go мы будем указывать из .env конфигурации
-func (h *Handler) Run(port string) error {
+// Run отвечает за то, чтобы запустить http сервер на порту, и передать API ключ в метод инициализации роутинга
+func (h *Handler) Run(port string, apiKey string) error {
 	router := gin.Default()
 
 	//инициализируем роутинг
-	h.Init(router.Group("/api"))
+	h.Init(router.Group("/api"), apiKey)
 
 	return router.Run(":" + port)
 }
