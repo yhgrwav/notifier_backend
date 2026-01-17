@@ -72,15 +72,28 @@ func (w *WebhookWorker) SendNotification(webhook domain.Webhook) error {
 }
 
 // SendWithRetry отвечает за вызов SendNotification с n ретраями
-func (w *WebhookWorker) SendWithRetry(webhook domain.Webhook, retries int) error {
-	for i := 1; i <= retries; i++ {
+func (w *WebhookWorker) SendWithRetry(ctx context.Context, webhook domain.Webhook, retries int) error {
+	for i := 1; i <= retries; i++ { //в цикле пытаемся отправить вебхук
 		err := w.SendNotification(webhook)
-		if err == nil { //если после отправки мы не получаем ошибку = ретрай был успешный и мы возвращаем nil
-			return nil
+		if err == nil {
+			return nil //игнорируем ошибку, чтобы попасть в нижний блок с реализацией ретраев
 		}
-		//каждую итерацию ретраев мы ждём на секунду больше, чтобы увеличить шансы на успешный кейс отправки вебхука
+
+		//попали в блок реализации ретраев и делаем проверку на какой итерации мы сейчас находимся (можно ли выполняться блоку ниже или нет)
+		//если нет - выполняем return, если можно - подставляем i в таймер
 		if i < retries {
-			time.Sleep(time.Duration(i) * time.Second)
+			timer := time.NewTimer(time.Duration(i) * time.Second)
+
+			select {
+			//здесь мы учитываем случай когда мы получили ctx.Done(), т.е. случай, когда главный контекст сказал выключаться
+			//мы останавливаем таймер и отдаём ctx.Err() в качестве логов
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+				//если таймер дотикал - выходим из селекта и снова делаем проверку, если проверка успешная - повторяем
+				continue
+			}
 		}
 	}
 	return fmt.Errorf("спустя %v ретраев не удалось отправить вебхук %v", retries, webhook.IncidentID)
