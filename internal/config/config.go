@@ -33,32 +33,32 @@ func GetEnv() (*Config, error) {
 	}
 
 	//2. Явно записываем необходимые данные в переменные
-	AppPort := os.Getenv("AppPort")
+	AppPort := os.Getenv("APP_PORT")
 
-	postgres := os.Getenv("PostgresDSN")
+	postgres := os.Getenv("POSTGRES_DSN")
 
-	RedisAddr := os.Getenv("RedisAddr")
+	RedisAddr := os.Getenv("REDIS_ADDR")
 
-	radiusStr := os.Getenv("warningZone")
+	radiusStr := os.Getenv("WARNING_ZONE")
 
-	cacheTimeout := os.Getenv("CacheTimeout")
+	cacheTimeout := os.Getenv("CACHE_UPDATE_TIMEOUT")
 	CacheUpdateTimeout, _ := strconv.Atoi(cacheTimeout)
 
 	statsTimeN := os.Getenv("STATS_TIME_WINDOW_MINUTES")
 	StatsTime, _ := strconv.Atoi(statsTimeN)
 
-	cacheTimeToLive := os.Getenv("cacheTTL")
+	cacheTimeToLive := os.Getenv("CACHE_TTL")
 	CacheTTl, _ := strconv.Atoi(cacheTimeToLive)
 
 	WebhookUrl := os.Getenv("WEBHOOK_URL")
 
-	retry := os.Getenv("webhook_retries")
+	retry := os.Getenv("WEBHOOK_RETRIES")
 	retries, _ := strconv.Atoi(retry)
 
-	webhooktimeout := os.Getenv("webhook_Timeout")
+	webhooktimeout := os.Getenv("WEBHOOK_TIMEOUT")
 	whto, _ := strconv.Atoi(webhooktimeout)
 
-	ApiKey := os.Getenv("ApiKey")
+	ApiKey := os.Getenv("API_KEY")
 
 	//3. Валидируем полученные данные
 	if postgres == "" {
@@ -129,7 +129,7 @@ func GetEnv() (*Config, error) {
 		CacheTTL:       CacheTTl,           //время жизни кэша в минутах
 		WebhookUrl:     WebhookUrl,         //ссылка на http-сервер-заглушку
 		WebhookRetries: retries,            //количество попыток отправить вебхук
-		WebhookTimeout: whto,
-		ApiKey:         ApiKey,
+		WebhookTimeout: whto,               //сколько секунд мы пытаемся поднять http client
+		ApiKey:         ApiKey,             //API ключ для доступа к методам оператора
 	}, nil
 }
