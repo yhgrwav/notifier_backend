@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -30,28 +31,25 @@ func NewWebhookWorker(redisRepo repository.RedisRepository, client *http.Client,
 func (w *WebhookWorker) Run(ctx context.Context) {
 	log.Println("Webhook worker успешно запущен")
 	for {
-		select {
-		case <-ctx.Done(): // Когда получаем сигнал от graceful shutdown - даём время завершиться всем запущенным воркерам
-			log.Println("Вебхук воркер завершается...")
-			return
-		default:
-			webhook, err := w.redisRepo.PopWebhook(ctx)
-			if err != nil {
-				log.Printf("Ошибка:%v", err)
-				continue
+		//пытаемся получить вебхук из очереди
+		webhook, err := w.redisRepo.PopWebhook(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) { //если получили context.Canceled - выходим
+				return
 			}
-			err = w.SendWithRetry(webhook, w.retriesAmount)
-			if err != nil {
-				log.Printf("Ошибка:%v", err)
-				continue
+			log.Printf("Ошибка получения данных: %v\n", err) //если ошибка не связана с контекстом - логируем и делаем ретрай
+			continue
+		}
+		//при получении ошибки вызываем обёртку с ретраем, передаем кол-во из .env и делаем проверку на context.Canceled
+		if err := w.SendWithRetry(ctx, webhook, w.retriesAmount); err != nil {
+			if errors.Is(err, context.Canceled) { //получили context.Canceled - выходим
+				return
 			}
 		}
-
 	}
 }
 
-// Я разделил логику отправки и ретраев на две функции
-// SendNotification отвечает исключительно за отправку уведомления
+// SendNotification отвечает за процесс отправки вебхука
 func (w *WebhookWorker) SendNotification(webhook domain.Webhook) error {
 	body, err := json.Marshal(webhook)
 	if err != nil {
