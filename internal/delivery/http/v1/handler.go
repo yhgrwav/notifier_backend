@@ -38,6 +38,9 @@ func (h *Handler) Init(api *gin.RouterGroup) {
 		v1.POST("/location/check", h.checkLocation)
 
 		incidents := v1.Group("/incidents")
+
+		//используем проверку на валидный ключ для группы эндпоинтов, которые использует оператор
+		incidents.Use(middleware.MiddlewareAuth(apiKey))
 		{
 			//эндпоинт для получения статистики за n минут
 			incidents.GET("/stats", h.GetStats)
