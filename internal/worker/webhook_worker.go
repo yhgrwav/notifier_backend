@@ -31,6 +31,7 @@ func NewWebhookWorker(redisRepo repository.RedisRepository, client *http.Client,
 func (w *WebhookWorker) Run(ctx context.Context) {
 	log.Println("Webhook worker успешно запущен")
 	for {
+
 		//пытаемся получить вебхук из очереди
 		webhook, err := w.redisRepo.PopWebhook(ctx)
 		if err != nil {
@@ -40,6 +41,7 @@ func (w *WebhookWorker) Run(ctx context.Context) {
 			log.Printf("Ошибка получения данных: %v\n", err) //если ошибка не связана с контекстом - логируем и делаем ретрай
 			continue
 		}
+
 		//при получении ошибки вызываем обёртку с ретраем, передаем кол-во из .env и делаем проверку на context.Canceled
 		if err := w.SendWithRetry(ctx, webhook, w.retriesAmount); err != nil {
 			if errors.Is(err, context.Canceled) { //получили context.Canceled - выходим
@@ -55,6 +57,7 @@ func (w *WebhookWorker) SendNotification(webhook domain.Webhook) error {
 	if err != nil {
 		return err
 	}
+
 	//Постим тело вебхука
 	resp, err := w.client.Post(w.URL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
