@@ -18,7 +18,7 @@ import (
 
 // HTTPClient должен уметь делать post
 type HTTPClient interface {
-	Post(url, contetType string, body io.Reader) (*http.Response, error)
+	Post(url, contentType string, body io.Reader) (*http.Response, error)
 }
 
 func NewHTTPClient(timeout int) *http.Client {
