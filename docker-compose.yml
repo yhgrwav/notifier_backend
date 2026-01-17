@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "${DB_PORT}:${DB_PORT}"
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: redis_cache
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+
+  app:
+    build: .
+    container_name: redcollar_app
+    ports:
+      - "${APP_PORT}:8080"
+    environment:
+      - APP_PORT=8080
+      - POSTGRES_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${DB_PORT}/${POSTGRES_DB}?sslmode=disable
+      - REDIS_PORT=redis:${REDIS_PORT}
+      - WARNING_ZONE=${WARNING_ZONE}
+      - STATS_TIME_WINDOW_MINUTES=${STATS_TIME_WINDOW_MINUTES}
+      - WEBHOOK_RETRIES=${WEBHOOK_RETRIES}
+      - CACHE_UPDATE_TIMEOUT=${CACHE_UPDATE_TIMEOUT}
+      - API_KEY=${API_KEY}
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - CACHE_TTL=${CACHE_TTL}
+      - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
