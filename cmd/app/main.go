@@ -20,7 +20,7 @@ func main() {
 	defer stop()
 
 	//читаем и записываем переменные из .env в переменную cfg
-	cfg, err := config.GetEnv()
+	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("не удалось получить данные из .env: %v", err)
 	}
