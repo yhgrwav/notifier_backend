@@ -40,6 +40,20 @@ func NewIncidentService(repo repository.IncidentRepository, rdb repository.Redis
 	return &IncidentService{repo: repo, rdb: rdb, warningZone: warningZone, CacheTTL: CacheTTL}
 }
 
+// ValidateCoordinates отвечает за валидацию координат и решает проблему дублирования кода
+func ValidateCoordinates(lat, lng float64) error {
+	if lat < -90 || lat > 90 {
+		return errors.New("невалидная широта (должна быть в диапазоне от -90 до 90)")
+	}
+	if lng < -180 || lng > 180 {
+		return errors.New("невалидная долгота (должна быть в диапазоне от -180 до 180")
+	}
+	if lng == 0.0 || lat == 0.0 {
+		return errors.New("не указаны координаты")
+	}
+	return nil
+}
+
 // Create отвечает за создание инцидента, валидацию полей, установку дефолтов
 func (s *IncidentService) Create(ctx context.Context, i *domain.Incident) (string, error) {
 	//Валидация
