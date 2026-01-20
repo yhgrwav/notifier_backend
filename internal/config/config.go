@@ -5,131 +5,70 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"os"
-	"strconv"
 
+	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	AppPort        string
-	PostgresDSN    string
-	RedisAddr      string
-	WarningZone    float64
-	CacheTimeout   int
-	StatsTime      int
-	CacheTTL       int
-	WebhookUrl     string
-	WebhookRetries int
-	WebhookTimeout int
-	ApiKey         string
+	AppPort        string  `env:"APP_PORT" envDefault:"8080"`
+	PostgresDSN    string  `env:"POSTGRES_DSN,required"`
+	RedisAddr      string  `env:"REDIS_ADDR" envDefault:"localhost:6379"`
+	WarningZone    float64 `env:"WARNING_ZONE" envDefault:"500.0"`
+	StatsTime      int     `env:"STATS_TIME_WINDOW_MINUTES" envDefault:"1"`
+	CacheTimeout   int     `env:"CACHE_UPDATE_TIMEOUT" envDefault:"2"`
+	CacheTTL       int     `env:"CACHE_TTL" envDefault:"10"`
+	WebhookUrl     string  `env:"WEBHOOK_URL" envDefault:"http://localhost/"`
+	WebhookRetries int     `env:"WEBHOOK_RETRIES" envDefault:"3"`
+	WebhookTimeout int     `env:"WEBHOOK_TIMEOUT" envDefault:"10"`
+	ApiKey         string  `env:"API_KEY,required"`
 }
 
-func GetEnv() (*Config, error) {
-	//1. С помощью godotenv.Load() записываем содержимое файла .env в память приложения
-	//Если не удалось прочитать через .env, читаем из environment в docker-compose
+func Load() (*Config, error) {
+	//подгружаем переменные в environment block
+	//если не получилось прочитать - логируем и пробуем получить их из настроек докера
 	if err := godotenv.Load(); err != nil {
-		log.Println("Файл .env не найден, производится попытка получить системные переменные...")
+		log.Println("Файл .env не найден, чтение системных переменных окружения...")
 	}
 
-	//2. Явно записываем необходимые данные в переменные
-	AppPort := os.Getenv("APP_PORT")
+	//создаём переменную в которую будем записывать тело структуры
+	cfg := &Config{}
 
-	postgres := os.Getenv("POSTGRES_DSN")
-
-	RedisAddr := os.Getenv("REDIS_ADDR")
-
-	radiusStr := os.Getenv("WARNING_ZONE")
-
-	cacheTimeout := os.Getenv("CACHE_UPDATE_TIMEOUT")
-	CacheUpdateTimeout, _ := strconv.Atoi(cacheTimeout)
-
-	statsTimeN := os.Getenv("STATS_TIME_WINDOW_MINUTES")
-	StatsTime, _ := strconv.Atoi(statsTimeN)
-
-	cacheTimeToLive := os.Getenv("CACHE_TTL")
-	CacheTTl, _ := strconv.Atoi(cacheTimeToLive)
-
-	WebhookUrl := os.Getenv("WEBHOOK_URL")
-
-	retry := os.Getenv("WEBHOOK_RETRIES")
-	retries, _ := strconv.Atoi(retry)
-
-	webhooktimeout := os.Getenv("WEBHOOK_TIMEOUT")
-	whto, _ := strconv.Atoi(webhooktimeout)
-
-	ApiKey := os.Getenv("API_KEY")
-
-	//3. Валидируем полученные данные
-	if postgres == "" {
-		return nil, errors.New("Ошибка: не указан адрес подключения к базе данных")
+	//парсим в структуру полученный результат благодаря тегам
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("ошибка парсинга переменных окружения: %w", err)
 	}
-	if AppPort == "" {
-		AppPort = "8080"
+
+	//вызываем локальный метод validate, чтобы сразу вернуть проверенные данные
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("ошибка валидации конфига: %w", err)
 	}
-	if RedisAddr == "" {
-		RedisAddr = "localhost:6379"
+
+	return cfg, nil
+}
+
+// validate содержит всю необходимую валидацию для переменных .env
+func (c *Config) validate() error {
+	if len(c.ApiKey) > 20 {
+		return errors.New("API_KEY слишком длинный (максимум 20 символов)")
 	}
-	radius, err := strconv.ParseFloat(radiusStr, 64)
+
+	parsedURL, err := url.Parse(c.WebhookUrl)
 	if err != nil {
-		radius = 500.0 // Дефолтное значение
-	}
-	if radiusStr == "" {
-		log.Println("Ошибка: переменная радиуса поиска инцидентов не указана, используем 500.0")
-		radius = 500.0
-	}
-	if CacheUpdateTimeout > 10 || CacheUpdateTimeout < 1 {
-		CacheUpdateTimeout = 2
-	}
-	if StatsTime < 1 {
-		StatsTime = 1
-	} else if StatsTime > 10000 {
-		StatsTime = 10000
-	}
-	if CacheTTl > 100 || CacheTTl < 1 {
-		CacheTTl = 10
-	}
-
-	parsedURL, err := url.Parse(WebhookUrl)
-	if err != nil {
-		return nil, fmt.Errorf("невалидный формат для webhook_url:%w", err)
+		return fmt.Errorf("некорректный формат WEBHOOK_URL: %w", err)
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, errors.New("webhook_url должен иметь http или https схему")
-	}
-	if len(WebhookUrl) < 1 {
-		//подставляем просто локалхост, но с выводом сообщений на случай, если вдруг юзер действительно ошибся с вводом
-		//и думает что использует валидный url
-		WebhookUrl = "http://localhost/"
-		log.Printf("получен невалидный webhook_url, используется дефолт(%s)", WebhookUrl)
+		return errors.New("WEBHOOK_URL должен использовать протокол http или https")
 	}
 
-	if retries > 50 || retries < 0 {
-		retries = 3
+	if c.StatsTime < 1 || c.StatsTime > 10000 {
+		c.StatsTime = 1
+		log.Println("Предупреждение: StatsTime вне диапазона, установлено значение 1")
 	}
 
-	if whto > 100 || whto < 0 {
-		whto = 10
-	}
-	if ApiKey == "" {
-		return &Config{}, errors.New("Ошибка: не указан API ключ")
-	}
-	if len(ApiKey) > 20 { // условное ограничение, которое необходимо будет поменять под какое-то стандартизированое значение
-		return &Config{}, errors.New("Ошибка: невалидная длина API ключа")
+	if c.WarningZone <= 0 {
+		return errors.New("WARNING_ZONE должна быть положительным числом")
 	}
 
-	//4. Возвращаем указатель на структуру
-	return &Config{
-		AppPort:        AppPort,            //порт приложения
-		PostgresDSN:    postgres,           //строка подключения к postgres
-		RedisAddr:      RedisAddr,          //адрес подключения к redis
-		WarningZone:    radius,             //радиус, в котором мы ищем опасности относительно точки пользователя
-		CacheTimeout:   CacheUpdateTimeout, //максимальное время ожидания ответа от redis (секунд)
-		StatsTime:      StatsTime,          //отвечает за то, за сколько минут мы будем собирать статистику
-		CacheTTL:       CacheTTl,           //время жизни кэша в минутах
-		WebhookUrl:     WebhookUrl,         //ссылка на http-сервер-заглушку
-		WebhookRetries: retries,            //количество попыток отправить вебхук
-		WebhookTimeout: whto,               //сколько секунд мы пытаемся поднять http client
-		ApiKey:         ApiKey,             //API ключ для доступа к методам оператора
-	}, nil
+	return nil
 }
