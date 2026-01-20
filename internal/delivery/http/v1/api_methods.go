@@ -2,6 +2,7 @@ package v1
 
 import (
 	"RedCollar/internal/domain"
+	"RedCollar/internal/service"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -123,14 +124,22 @@ func (h *Handler) UpdateIncident(c *gin.Context) {
 
 // GET /api/v1/incidents
 func (h *Handler) GetIncidents(c *gin.Context) {
-	//получаем координаты, параметры пагинации
-	lat, _ := strconv.ParseFloat(c.DefaultQuery("latitude", "0"), 64)
-	lng, _ := strconv.ParseFloat(c.DefaultQuery("longitude", "0"), 64)
+	//создаём структуру запроса, в которую будем записывать ответ
+	var request domain.LocationCheckRequest
+	if err := c.ShouldBindJSON(&request); err != nil { //кейс неверного формата запроса
+		c.JSON(400, gin.H{"ошибка": err.Error()})
+		return
+	}
+	err := service.ValidateCoordinates(request.Latitude, request.Longitude)
+	if err != nil {
+		c.JSON(400, gin.H{"ошибка": err.Error()}) //кейс невалидных координат
+		return
+	}
+	//получаем параметры пагинации
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-
 	//передаем всё в аргументы метода сервиса
-	result, err := h.service.Get(c.Request.Context(), lat, lng, limit, offset)
+	result, err := h.service.Get(c.Request.Context(), request.Latitude, request.Longitude, limit, offset)
 	if err != nil {
 		c.JSON(500, gin.H{"Ошибка": err.Error()}) // если ошибка - отдаём ошибку
 		return
