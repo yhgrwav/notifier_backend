@@ -63,11 +63,9 @@ func (s *IncidentService) Create(ctx context.Context, i *domain.Incident) (strin
 	if len(i.Title) > 255 {
 		return "", errors.New("заголовок слишком длинный (максимум 255 символов)")
 	}
-	if i.Latitude < -90 || i.Latitude > 90 {
-		return "", errors.New("невалидная широта (должна быть в диапазоне от -90 до 90)")
-	}
-	if i.Longitude < -180 || i.Longitude > 180 {
-		return "", errors.New("невалидная долгота (должна быть в диапазоне от -180 до 180)")
+	err := ValidateCoordinates(i.Latitude, i.Longitude)
+	if err != nil {
+		return "", err
 	}
 
 	//Если мы не получили радиус, или получили невалидный, то ставим валидный дефолт
@@ -90,13 +88,11 @@ func (s *IncidentService) Create(ctx context.Context, i *domain.Incident) (strin
 // Get отвечает за то, чтобы возвращать валидный список инцидентов в радиусе(warningZone из .env)
 // этот метод универсален и для пользователя и для оператора, а также не требует пересборки проекта ради изменения радиуса
 func (i *IncidentService) Get(ctx context.Context, lat float64, long float64, limit, offset int) ([]*domain.Incident, error) {
-	//Проверка на валидность координат
-	if lat < -90 || lat > 90 {
-		return nil, errors.New("невалидная широта (должна быть в диапазоне от -90 до 90)")
+	err := ValidateCoordinates(lat, long)
+	if err != nil {
+		return []*domain.Incident{}, err
 	}
-	if long < -180 || long > 180 {
-		return nil, errors.New("невалидная долгота (должна быть в диапазоне от -180 до 180)")
-	}
+
 	//Валидация пагинации
 	if limit <= 0 {
 		limit = 10
@@ -167,11 +163,9 @@ func (i *IncidentService) Update(ctx context.Context, id string, incident *domai
 	if len(incident.Description) > 255 {
 		return uuid.Nil, errors.New("описание слишком длинное (максимум 255 символов)")
 	}
-	if incident.Latitude < -90 || incident.Latitude > 90 {
-		return uuid.Nil, errors.New("невалидная широта (должна быть в диапазоне от -90 до 90)")
-	}
-	if incident.Longitude < -180 || incident.Longitude > 180 {
-		return uuid.Nil, errors.New("невалидная долгота (должна быть в диапазоне от -180 до 180)")
+	err = ValidateCoordinates(incident.Latitude, incident.Longitude)
+	if err != nil {
+		return uuid.Nil, err
 	}
 
 	err = i.repo.Update(ctx, incident)
@@ -183,12 +177,9 @@ func (i *IncidentService) Update(ctx context.Context, id string, incident *domai
 
 // CheckLocation Принимает структуру запроса и отдаёт структуру ответа, которые описаны в /domain/models.go
 func (i *IncidentService) CheckLocation(ctx context.Context, request domain.LocationCheckRequest, limit, offset int) (domain.LocationCheckResponse, error) {
-	//Проверка на валидность координат
-	if request.Latitude < -90 || request.Latitude > 90 {
-		return domain.LocationCheckResponse{}, errors.New("невалидная широта (должна быть в диапазоне от -90 до 90)")
-	}
-	if request.Longitude < -180 || request.Longitude > 180 {
-		return domain.LocationCheckResponse{}, errors.New("невалидная долгота (должна быть в диапазоне от -180 до 180)")
+	err := ValidateCoordinates(request.Latitude, request.Longitude)
+	if err != nil {
+		return domain.LocationCheckResponse{}, err
 	}
 
 	//создаем переменную для хранения инцидентов
